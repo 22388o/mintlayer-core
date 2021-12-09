@@ -156,6 +156,21 @@ impl std::ops::Shr<u32> for Amount {
     }
 }
 
+impl std::iter::Sum<Amount> for Option<Amount> {
+    fn sum<I>(mut iter: I) -> Self
+    where
+        I: Iterator<Item = Amount>,
+    {
+        let mut result = Some(Amount::new(0));
+        loop {
+            match (iter.next(), result) {
+                (Some(amount), Some(partial_sum)) => result = partial_sum + amount,
+                _ => break result,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,6 +227,27 @@ mod tests {
     #[test]
     fn add_overflow() {
         assert_eq!(Amount { val: IntType::MAX } + Amount { val: 1 }, None);
+    }
+
+    #[test]
+    fn sum_some() {
+        let amounts = vec![Amount { val: 1 }, Amount { val: 2 }, Amount { val: 3 }];
+        assert_eq!(
+            amounts.into_iter().sum::<Option<Amount>>(),
+            Some(Amount { val: 6 })
+        );
+    }
+
+    #[test]
+    fn sum_overflow() {
+        let amounts = vec![
+            Amount { val: 1 },
+            Amount { val: 2 },
+            Amount {
+                val: IntType::MAX - 2,
+            },
+        ];
+        assert_eq!(amounts.into_iter().sum::<Option<Amount>>(), None);
     }
 
     #[test]
