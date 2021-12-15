@@ -177,8 +177,8 @@ pub fn verify_witness_lock<Ctx: Context>(
     witness: &Script,
     lock: &Script,
 ) -> crate::Result<()> {
-    let stack = run_pushdata(ctx, &witness)?;
-    let stack = run_script(ctx, &lock, stack)?;
+    let stack = run_pushdata(ctx, witness)?;
+    let stack = run_script(ctx, lock, stack)?;
     stack.verify()
 }
 

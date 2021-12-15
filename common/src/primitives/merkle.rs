@@ -36,8 +36,7 @@ fn next_pow2(n: usize) -> usize {
     }
     let leading_zeros = (n - 1).leading_zeros() as usize;
     let active_bits = usize::BITS as usize - leading_zeros;
-    let pow2_size = (1 << active_bits) as usize;
-    pow2_size
+    (1 << active_bits) as usize
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,8 +69,8 @@ impl From<anyhow::Error> for MerkleTreeFormError {
 }
 
 fn concatenate_with_padding_as_bytes(elements: &[H256], padding: Vec<H256>) -> Vec<u8> {
-    let data: Vec<u8> = elements.iter().flat_map(|el| el.as_bytes().to_vec()).collect();
-    let padding_data: Vec<u8> = padding.iter().flat_map(|el| el.as_bytes().to_vec()).collect();
+    let data = elements.iter().flat_map(|el| el.as_bytes().to_vec());
+    let padding_data = padding.iter().flat_map(|el| el.as_bytes().to_vec());
     let data: Vec<u8> = data.into_iter().chain(padding_data.into_iter()).collect();
     data
 }

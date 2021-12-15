@@ -1,11 +1,11 @@
 pub use log;
 
 pub fn is_only_terminal_output_logging() -> bool {
-    return true;
+    true
 }
 
 pub fn is_file_output_supported() -> bool {
-    return false;
+    false
 }
 
 pub fn init_logging<P: AsRef<std::path::Path>>(_log_file_path: Option<P>) {

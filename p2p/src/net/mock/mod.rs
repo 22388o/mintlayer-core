@@ -52,7 +52,7 @@ impl NetworkService for MockService {
 
     async fn new(addr: Self::Address) -> error::Result<Self> {
         Ok(Self {
-            addr: addr,
+            addr,
             socket: TcpListener::bind(addr).await?,
         })
     }
@@ -112,7 +112,7 @@ impl SocketService for MockSocket {
 
         match self.socket.read(&mut data).await? {
             0 => Err(P2pError::PeerDisconnected),
-            _ => Decode::decode(&mut &data[..]).map_err(|e| P2pError::DecodeFailure(e)),
+            _ => Decode::decode(&mut &data[..]).map_err(P2pError::DecodeFailure),
         }
     }
 }

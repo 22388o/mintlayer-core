@@ -7,8 +7,8 @@ pub trait AddressableData<T: AsRef<[u8]>> {
         encoding::encode(self.get_hrp(), self.get_data())
     }
 
-    fn decode(&mut self, addr: &String) -> Result<(), Bech32Error> {
-        let decoded = encoding::decode(&addr)?;
+    fn decode(&mut self, addr: &str) -> Result<(), Bech32Error> {
+        let decoded = encoding::decode(addr)?;
         self.set_data(decoded.data.as_ref());
         Ok(())
     }

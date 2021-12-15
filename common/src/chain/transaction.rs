@@ -87,9 +87,9 @@ impl Idable<TransactionV1> for TransactionV1 {
     }
 }
 
-impl Into<Id<Transaction>> for Id<TransactionV1> {
-    fn into(self) -> Id<Transaction> {
-        Id::new(&self.get())
+impl From<Id<TransactionV1>> for Id<Transaction> {
+    fn from(id_tx_v1: Id<TransactionV1>) -> Id<Transaction> {
+        Id::new(&id_tx_v1.get())
     }
 }
 
