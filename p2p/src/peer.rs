@@ -113,7 +113,7 @@ where
     /// the task information is returned as an `Option` to the caller so that it knows
     /// the reschedule the event.
     ///
-    /// This design allows the peer event loop to wait onan arbitrary number of 
+    /// This design allows the peer event loop to wait onan arbitrary number of
     /// timer-based events, both scheduled and one-shot.
     async fn on_timer_event(&mut self, task_id: TaskId) -> error::Result<Option<TaskInfo>> {
         todo!();
@@ -145,9 +145,9 @@ where
                     self.on_manager_event(event).await?;
                 }
                 task = tasks.select_next_some() => {
-                    self.on_timer_event(task).await?.map(|info| {
+                    if let Some(info) = self.on_timer_event(task).await? {
                         tasks.push(schedule_event(info));
-                    });
+                    };
                 }
             }
         }
