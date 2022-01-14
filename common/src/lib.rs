@@ -18,6 +18,7 @@
 pub mod address;
 pub mod chain;
 pub mod primitives;
+pub mod util;
 
 #[cfg(test)]
 mod tests {
