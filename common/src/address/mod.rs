@@ -30,7 +30,7 @@ impl From<Bech32Error> for AddressError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct Address {
     address: String,
 }

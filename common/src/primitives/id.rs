@@ -29,7 +29,7 @@ impl From<GenericArray<u8, typenum::U32>> for H256 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
 pub struct Id<T: ?Sized> {
     id: H256,
     _shadow: std::marker::PhantomData<T>,

@@ -7,7 +7,7 @@ use parity_scale_codec_derive::{Decode as DecodeDer, Encode as EncodeDer};
 
 use super::Transaction;
 
-#[derive(Debug, Clone, PartialEq, Eq, EncodeDer, DecodeDer)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq, EncodeDer, DecodeDer)]
 pub struct TransactionV1 {
     flags: u32,
     inputs: Vec<TxInput>,
