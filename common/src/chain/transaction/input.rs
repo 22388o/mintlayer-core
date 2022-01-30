@@ -9,6 +9,8 @@ pub struct OutPoint {
 }
 
 impl OutPoint {
+    pub const COINBASE_OUTPOINT_INDEX: u32 = u32::MAX;
+
     pub fn new(prev_tx_id: Id<Transaction>, output_index: u32) -> Self {
         OutPoint {
             id: prev_tx_id,
@@ -22,6 +24,10 @@ impl OutPoint {
 
     pub fn get_output_index(&self) -> u32 {
         self.index
+    }
+
+    pub fn is_coinbase(&self) -> bool {
+        self.id.is_null() && self.index == Self::COINBASE_OUTPOINT_INDEX
     }
 }
 

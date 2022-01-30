@@ -105,6 +105,12 @@ impl Transaction {
             Transaction::V1(tx) => tx.get_serialized_hash(),
         }
     }
+
+    pub fn is_coinbase(&self) -> bool {
+        match &self {
+            Transaction::V1(tx) => tx.is_coinbase(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -46,6 +46,10 @@ impl<T> Id<T> {
             _shadow: std::marker::PhantomData,
         }
     }
+
+    pub fn is_null(&self) -> bool {
+        self.id == H256::zero()
+    }
 }
 
 impl<T> AsRef<[u8]> for Id<T> {

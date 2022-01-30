@@ -57,6 +57,16 @@ impl TransactionV1 {
     pub fn get_serialized_hash(&self) -> Id<Transaction> {
         Id::new(&id::hash_encoded(self))
     }
+
+    pub fn is_coinbase(&self) -> bool {
+        self.inputs.len() == 1
+            && self
+                .inputs
+                .first()
+                .expect("Transaction must have at least one input")
+                .get_outpoint()
+                .is_coinbase()
+    }
 }
 
 impl Idable<TransactionV1> for TransactionV1 {
