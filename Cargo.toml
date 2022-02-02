@@ -17,6 +17,7 @@ members = [
   "consensus",     # code on consensus of blocks and transactions
   "script",        # bitcoin script and its interfaces
   "logging",       # logging engine and its interfaces
+  "mempool",       # mempool interface and implementation
   "p2p",           # p2p communication interfaces and protocols
   "network",       # network abstractions and their implementations
   "rpc",           # rpc abstraction and implementation
@@ -33,6 +34,7 @@ default-members = [
   "consensus",
   "script",
   "logging",
+  "mempool",
   "p2p",
   "network",
   "rpc",
@@ -50,6 +52,7 @@ crypto = { path = "crypto"}
 consensus = { path = "consensus"}
 script = { path = "script"}
 logging = { path = "logging"}
+mempool = { path = "mempool"}
 p2p = { path = "p2p"}
 network = { path = "network"}
 rpc = { path = "rpc"}

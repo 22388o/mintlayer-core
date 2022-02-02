@@ -1,7 +1,5 @@
-use crypto::hash::StreamHasher;
-
 use crate::chain::transaction::Transaction;
-use crate::primitives::{id, Id, Idable};
+use crate::primitives::Id;
 use parity_scale_codec::{Decode, Encode};
 
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
@@ -33,12 +31,22 @@ impl OutPoint {
     }
 }
 
-impl Idable<OutPoint> for OutPoint {
-    fn get_id(&self) -> Id<Self> {
-        let mut hash_stream = id::DefaultHashAlgoStream::new();
-        id::hash_encoded_to(&self.id, &mut hash_stream);
-        id::hash_encoded_to(&self.index, &mut hash_stream);
-        Id::new(&hash_stream.finalize().into())
+impl PartialOrd for OutPoint {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.id.get().partial_cmp(&other.id.get()).and_then(|ordering| match ordering {
+            std::cmp::Ordering::Equal => self.index.partial_cmp(&other.index),
+            _ => Some(ordering),
+        })
+    }
+}
+
+impl Ord for OutPoint {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let id_ord = self.id.get().cmp(&other.id.get());
+        match id_ord {
+            std::cmp::Ordering::Equal => self.index.cmp(&other.index),
+            _ => id_ord,
+        }
     }
 }
 
