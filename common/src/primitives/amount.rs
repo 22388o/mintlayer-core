@@ -1,6 +1,7 @@
 #![allow(clippy::eq_op)]
 
 use parity_scale_codec::{Decode, Encode};
+use rand::Rng;
 
 // Copyright (c) 2021 RBB S.r.l
 // opensource@mintlayer.org
@@ -38,12 +39,6 @@ impl Amount {
 impl From<u128> for Amount {
     fn from(v: u128) -> Self {
         Amount { val: v }
-    }
-}
-
-impl From<Amount> for u128 {
-    fn from(amount: Amount) -> Self {
-        amount.val
     }
 }
 
@@ -168,6 +163,10 @@ impl std::iter::Sum<Amount> for Option<Amount> {
     {
         iter.try_fold(Amount::new(0), std::ops::Add::add)
     }
+}
+
+pub fn random(range: std::ops::RangeInclusive<Amount>) -> Amount {
+    rand::thread_rng().gen_range(range.start().val..=range.end().val).into()
 }
 
 #[cfg(test)]
