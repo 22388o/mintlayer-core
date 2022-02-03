@@ -3,6 +3,7 @@
 // use common::chain::block::Block;
 
 mod orphan_blocks;
+mod pos;
 // use orphan_blocks::OrphanBlocks;
 
 // struct Consensus<S: BlockchainStorage> {
