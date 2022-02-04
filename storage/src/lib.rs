@@ -81,3 +81,47 @@ pub use transaction::{abort, commit};
 
 pub type Data = Vec<u8>;
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod test {
+    /*
+    use crate::{schema, traits::*};
+
+    struct MyColumn;
+    impl schema::Column for MyColumn {
+        const NAME: &'static str = "MyColumnV1";
+        type Kind = schema::Single;
+    }
+
+    type MySchema = (MyColumn, ());
+    type MyStore = crate::Store<MySchema>;
+
+    fn generic_aborted_write<'st: 'tx, 'tx, St, Tx: 'tx>(store: &'st St)
+    where
+        Tx: TransactionRw + GetMapMut<'tx, MySchema>,
+        St: Transactional<'st, TransactionRw = Tx>,
+    {
+        let mut tx = store.start_transaction_rw();
+        let col = tx.get_mut::<MyColumn, _>();
+        std::mem::drop(col);
+        tx.abort();
+    }
+
+    #[test]
+    fn test_abort() {
+        let store = MyStore::default();
+        generic_aborted_write(&store);
+    }
+
+    #[test]
+    fn test_abort_inline() {
+        let store = MyStore::default();
+
+        let mut tx = store.start_transaction_rw();
+        let col = tx.get_mut::<MyColumn, _>();
+        std::mem::drop(col);
+        let _ = tx.abort();
+
+    }
+    */
+}

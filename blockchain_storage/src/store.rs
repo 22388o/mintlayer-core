@@ -4,7 +4,7 @@ use common::primitives::{BlockHeight, Id, Idable};
 use parity_scale_codec::{Codec, Decode, DecodeAll, Encode};
 use storage::traits::*;
 
-use crate::BlockchainStorage;
+use crate::{BlockchainStorageRead, BlockchainStorageWrite};
 
 mod well_known {
     use super::{Block, Codec, Id};
@@ -64,9 +64,11 @@ impl storage::schema::Column for DBBlockByHeight {
 // Complete database schema
 type Schema = (DBValues, (DBBlocks, (DBTxIndices, (DBBlockByHeight, ()))));
 
+type StoreImpl = storage::Store<Schema>;
+
 /// Persistent store for blockchain data
 #[derive(Clone)]
-pub struct Store(storage::Store<Schema>);
+pub struct Store(StoreImpl);
 
 /// Store for blockchain data
 impl Store {
@@ -79,15 +81,15 @@ impl Store {
 }
 
 impl<'st> Transactional<'st> for Store {
-    type TransactionRo = StoreTxRw<'st>;
-    type TransactionRw = StoreTxRw<'st>;
+    type TransactionRo = StoreTx<<StoreImpl as Transactional<'st>>::TransactionRo>;
+    type TransactionRw = StoreTx<<StoreImpl as Transactional<'st>>::TransactionRw>;
 
     fn start_transaction_ro(&'st self) -> Self::TransactionRo {
-        StoreTxRw(self.0.start_transaction_rw())
+        StoreTx(self.0.start_transaction_ro())
     }
 
     fn start_transaction_rw(&'st self) -> Self::TransactionRw {
-        StoreTxRw(self.0.start_transaction_rw())
+        StoreTx(self.0.start_transaction_rw())
     }
 }
 
@@ -108,34 +110,23 @@ macro_rules! delegate_to_transaction {
         fn $f(&$($mut)? self $(, $arg: $aty)*) -> $ret {
             #[allow(clippy::needless_question_mark)]
             self.$txfunc(
-                |tx| $commit(<Self as Transactional>::TransactionRw::$f(tx $(, $arg)*)?)
+                //|tx| $commit(<Self as Transactional>::TransactionRo::$f(tx $(, $arg)*)?)
+                |tx| $commit(tx.$f($($arg),*)?)
             )
         }
     };
 }
 
-impl BlockchainStorage for Store {
+impl BlockchainStorageRead for Store {
     delegate_to_transaction! {
         fn get_storage_version(&self) -> crate::Result<u32>;
-        fn set_storage_version(&mut self, version: u32) -> crate::Result<()>;
         fn get_best_block_id(&self) -> crate::Result<Option<Id<Block>>>;
-        fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()>;
         fn get_block(&self, id: Id<Block>) -> crate::Result<Option<Block>>;
-        fn add_block(&mut self, block: &Block) -> crate::Result<()>;
-        fn del_block(&mut self, id: Id<Block>) -> crate::Result<()>;
-
-        fn set_mainchain_tx_index(
-            &mut self,
-            tx_id: &Id<Transaction>,
-            tx_index: &TxMainChainIndex,
-        ) -> crate::Result<()>;
 
         fn get_mainchain_tx_index(
             &self,
             tx_id: &Id<Transaction>,
         ) -> crate::Result<Option<TxMainChainIndex>>;
-
-        fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()>;
 
         fn get_mainchain_tx_by_position(
             &self,
@@ -148,6 +139,24 @@ impl BlockchainStorage for Store {
             &self,
             height: &BlockHeight,
         ) -> crate::Result<Option<Id<Block>>>;
+    }
+}
+
+/*
+impl BlockchainStorageWrite for Store {
+    delegate_to_transaction! {
+        fn set_storage_version(&mut self, version: u32) -> crate::Result<()>;
+        fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()>;
+        fn add_block(&mut self, block: &Block) -> crate::Result<()>;
+        fn del_block(&mut self, id: Id<Block>) -> crate::Result<()>;
+
+        fn set_mainchain_tx_index(
+            &mut self,
+            tx_id: &Id<Transaction>,
+            tx_index: &TxMainChainIndex,
+        ) -> crate::Result<()>;
+
+        fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()>;
 
         fn set_block_id_at_height(
             &mut self,
@@ -158,57 +167,29 @@ impl BlockchainStorage for Store {
         fn del_block_id_at_height(&mut self, height: &BlockHeight) -> crate::Result<()>;
     }
 }
+*/
 
-/// Transaction over blockchain data store
-pub struct StoreTxRw<'st>(<storage::Store<Schema> as Transactional<'st>>::TransactionRw);
+type StoreTxRwImpl<'st> = <storage::Store<Schema> as Transactional<'st>>::TransactionRw;
+type StoreTxRoImpl<'st> = <storage::Store<Schema> as Transactional<'st>>::TransactionRo;
+
+struct StoreTx<T>(T);
+
+// ============================== OLD  ===================================
 
 /// Blockchain data storage transaction
-impl BlockchainStorage for StoreTxRw<'_> {
-    /// Get storage version
+impl<Tx: for<'a> GetMapRef<'a, Schema>> BlockchainStorageRead for StoreTx<Tx> {
     fn get_storage_version(&self) -> crate::Result<u32> {
         self.read_value::<well_known::StoreVersion>().map(|v| v.unwrap_or_default())
     }
 
-    /// Set storage version
-    fn set_storage_version(&mut self, version: u32) -> crate::Result<()> {
-        self.write_value::<well_known::StoreVersion>(&version)
-    }
-
-    /// Get the hash of the best block
     fn get_best_block_id(&self) -> crate::Result<Option<Id<Block>>> {
         self.read_value::<well_known::BestBlockId>()
     }
 
-    /// Set the hash of the best block
-    fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()> {
-        self.write_value::<well_known::BestBlockId>(id)
-    }
-
-    /// Get block by its hash
     fn get_block(&self, id: Id<Block>) -> crate::Result<Option<Block>> {
         self.read::<DBBlocks, _, _>(id.as_ref())
     }
 
-    /// Add a new block into the database
-    fn add_block(&mut self, block: &Block) -> crate::Result<()> {
-        self.write::<DBBlocks, _, _>(block.get_id().encode(), block)
-    }
-
-    /// Remove block from the database
-    fn del_block(&mut self, id: Id<Block>) -> crate::Result<()> {
-        self.0.get_mut::<DBBlocks, _>().del(id.as_ref()).map_err(Into::into)
-    }
-
-    /// Set state of the outputs of given transaction
-    fn set_mainchain_tx_index(
-        &mut self,
-        tx_id: &Id<Transaction>,
-        tx_index: &TxMainChainIndex,
-    ) -> crate::Result<()> {
-        self.write::<DBTxIndices, _, _>(tx_id.encode(), tx_index)
-    }
-
-    /// Get outputs state for given transaction in the mainchain
     fn get_mainchain_tx_index(
         &self,
         tx_id: &Id<Transaction>,
@@ -216,12 +197,6 @@ impl BlockchainStorage for StoreTxRw<'_> {
         self.read::<DBTxIndices, _, _>(tx_id.as_ref())
     }
 
-    /// Delete outputs state index associated with given transaction
-    fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()> {
-        self.0.get_mut::<DBTxIndices, _>().del(tx_id.as_ref()).map_err(Into::into)
-    }
-
-    /// Get transaction
     fn get_mainchain_tx_by_position(
         &self,
         tx_index: &TxMainChainPosition,
@@ -246,12 +221,41 @@ impl BlockchainStorage for StoreTxRw<'_> {
         })
     }
 
-    /// Get mainchain block by its height
     fn get_block_id_by_height(&self, height: &BlockHeight) -> crate::Result<Option<Id<Block>>> {
         self.read::<DBBlockByHeight, _, _>(&height.encode())
     }
+}
 
-    /// Set the mainchain block at given height to be given block.
+/*
+impl BlockchainStorageWrite for StoreTxRw<'_> {
+    fn set_storage_version(&mut self, version: u32) -> crate::Result<()> {
+        self.write_value::<well_known::StoreVersion>(&version)
+    }
+
+    fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()> {
+        self.write_value::<well_known::BestBlockId>(id)
+    }
+
+    fn add_block(&mut self, block: &Block) -> crate::Result<()> {
+        self.write::<DBBlocks, _, _>(block.get_id().encode(), block)
+    }
+
+    fn del_block(&mut self, id: Id<Block>) -> crate::Result<()> {
+        self.0.get_mut::<DBBlocks, _>().del(id.as_ref()).map_err(Into::into)
+    }
+
+    fn set_mainchain_tx_index(
+        &mut self,
+        tx_id: &Id<Transaction>,
+        tx_index: &TxMainChainIndex,
+    ) -> crate::Result<()> {
+        self.write::<DBTxIndices, _, _>(tx_id.encode(), tx_index)
+    }
+
+    fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()> {
+        self.0.get_mut::<DBTxIndices, _>().del(tx_id.as_ref()).map_err(Into::into)
+    }
+
     fn set_block_id_at_height(
         &mut self,
         height: &BlockHeight,
@@ -260,15 +264,17 @@ impl BlockchainStorage for StoreTxRw<'_> {
         self.write::<DBBlockByHeight, _, _>(height.encode(), block_id)
     }
 
-    /// Remove block id from given mainchain height
     fn del_block_id_at_height(&mut self, height: &BlockHeight) -> crate::Result<()> {
         self.0.get_mut::<DBBlockByHeight, _>().del(&height.encode()).map_err(Into::into)
     }
 }
+*/
 
-impl StoreTxRw<'_> {
+//   ======================== NEW ===============
+
+impl<'a, Tx: GetMapRef<'a, Schema>> StoreTx<Tx> {
     // Read a value from the database and decode it
-    fn read<Col, I, T>(&self, key: &[u8]) -> crate::Result<Option<T>>
+    fn read<Col, I, T>(&'a self, key: &[u8]) -> crate::Result<Option<T>>
     where
         Col: storage::schema::Column<Kind = storage::schema::Single>,
         Schema: storage::schema::HasColumn<Col, I>,
@@ -279,8 +285,15 @@ impl StoreTxRw<'_> {
         Ok(data.map(|d| T::decode_all(d).expect("Cannot decode a database value")))
     }
 
+    // Read a value for a well-known entry
+    fn read_value<E: well_known::Entry>(&'a self) -> crate::Result<Option<E::Value>> {
+        self.read::<DBValues, _, _>(E::KEY)
+    }
+}
+
+impl<'a, Tx: GetMapMut<'a, Schema>> StoreTx<Tx> {
     // Encode a value and write it to the database
-    fn write<Col, I, T>(&mut self, key: Vec<u8>, value: &T) -> crate::Result<()>
+    fn write<Col, I, T>(&'a mut self, key: Vec<u8>, value: &T) -> crate::Result<()>
     where
         Col: storage::schema::Column<Kind = storage::schema::Single>,
         Schema: storage::schema::HasColumn<Col, I>,
@@ -289,18 +302,13 @@ impl StoreTxRw<'_> {
         self.0.get_mut::<Col, I>().put(key, value.encode()).map_err(Into::into)
     }
 
-    // Read a value for a well-known entry
-    fn read_value<E: well_known::Entry>(&self) -> crate::Result<Option<E::Value>> {
-        self.read::<DBValues, _, _>(E::KEY)
-    }
-
     // Write a value for a well-known entry
-    fn write_value<E: well_known::Entry>(&mut self, val: &E::Value) -> crate::Result<()> {
+    fn write_value<E: well_known::Entry>(&'a mut self, val: &E::Value) -> crate::Result<()> {
         self.write::<DBValues, _, _>(E::KEY.to_vec(), val)
     }
 }
 
-impl TransactionRw for StoreTxRw<'_> {
+impl<T: TransactionRw<Error = storage::Error>> TransactionRw for StoreTx<T> {
     type Error = crate::Error;
 
     fn commit(self) -> crate::Result<()> {
@@ -312,11 +320,11 @@ impl TransactionRw for StoreTxRw<'_> {
     }
 }
 
-impl TransactionRo for StoreTxRw<'_> {
+impl<T: TransactionRo<Error = storage::Error>> TransactionRo for StoreTx<T> {
     type Error = crate::Error;
 
     fn finalize(self) -> crate::Result<()> {
-        self.0.commit().map_err(Into::into)
+        self.0.finalize().map_err(Into::into)
     }
 }
 
