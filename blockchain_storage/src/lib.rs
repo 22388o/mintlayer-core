@@ -4,8 +4,8 @@ use common::chain::block::Block;
 use common::chain::transaction::{Transaction, TxMainChainIndex, TxMainChainPosition};
 use common::primitives::{BlockHeight, Id};
 
-//#[cfg(any(test, feature = "mock"))]
-//pub mod mock;
+#[cfg(any(test, feature = "mock"))]
+pub mod mock;
 mod store;
 
 pub use store::Store;

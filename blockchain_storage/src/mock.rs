@@ -203,7 +203,8 @@ mod tests {
     fn attach_block_to_top<'a, BS>(store: &'a mut BS, block: &Block) -> &'static str
     where
         BS: Transactional<'a>,
-        BS::TransactionRw: storage::traits::TransactionRw<Error = crate::Error> + BlockchainStorageWrite<'a>,
+        BS::TransactionRw: storage::traits::TransactionRw<Error = crate::Error>
+            + for<'b> BlockchainStorageWrite<'b>,
     {
         let res: crate::Result<&'static str> = store.transaction_rw(|tx| {
             // Get current best block ID
