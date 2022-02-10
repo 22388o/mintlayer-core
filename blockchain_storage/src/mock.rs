@@ -8,26 +8,16 @@ mockall::mock! {
     /// A mock object for blockchain storage
     pub Store {}
 
-    impl crate::BlockchainStorage for Store {
+    impl crate::BlockchainStorageRead<'_> for Store {
         fn get_storage_version(&self) -> crate::Result<u32>;
-        fn set_storage_version(&mut self, version: u32) -> crate::Result<()>;
         fn get_best_block_id(&self) -> crate::Result<Option<Id<Block>>>;
-        fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()>;
-        fn add_block(&mut self, block: &Block) -> crate::Result<()>;
         fn get_block(&self, id: Id<Block>) -> crate::Result<Option<Block>>;
-        fn del_block(&mut self, id: Id<Block>) -> crate::Result<()>;
-        fn set_mainchain_tx_index(
-            &mut self,
-            tx_id: &Id<Transaction>,
-            tx_index: &TxMainChainIndex,
-        ) -> crate::Result<()>;
 
         fn get_mainchain_tx_index(
             &self,
             tx_id: &Id<Transaction>,
         ) -> crate::Result<Option<TxMainChainIndex>>;
 
-        fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()>;
 
         fn get_mainchain_tx_by_position(
             &self,
@@ -40,6 +30,19 @@ mockall::mock! {
             &self,
             height: &BlockHeight,
         ) -> crate::Result<Option<Id<Block>>>;
+    }
+
+    impl crate::BlockchainStorageWrite<'_> for Store {
+        fn set_storage_version(&mut self, version: u32) -> crate::Result<()>;
+        fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()>;
+        fn add_block(&mut self, block: &Block) -> crate::Result<()>;
+        fn del_block(&mut self, id: Id<Block>) -> crate::Result<()>;
+        fn set_mainchain_tx_index(
+            &mut self,
+            tx_id: &Id<Transaction>,
+            tx_index: &TxMainChainIndex,
+        ) -> crate::Result<()>;
+        fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()>;
 
         fn set_block_id_at_height(
             &mut self,
@@ -62,26 +65,15 @@ mockall::mock! {
     /// A mock object for blockcain storage transaction
     pub StoreTx {}
 
-    impl crate::BlockchainStorage for StoreTx {
+    impl crate::BlockchainStorageRead<'_> for StoreTx {
         fn get_storage_version(&self) -> crate::Result<u32>;
-        fn set_storage_version(&mut self, version: u32) -> crate::Result<()>;
         fn get_best_block_id(&self) -> crate::Result<Option<Id<Block>>>;
-        fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()>;
-        fn add_block(&mut self, block: &Block) -> crate::Result<()>;
         fn get_block(&self, id: Id<Block>) -> crate::Result<Option<Block>>;
-        fn del_block(&mut self, id: Id<Block>) -> crate::Result<()>;
-        fn set_mainchain_tx_index(
-            &mut self,
-            tx_id: &Id<Transaction>,
-            tx_index: &TxMainChainIndex,
-        ) -> crate::Result<()>;
 
         fn get_mainchain_tx_index(
             &self,
             tx_id: &Id<Transaction>,
         ) -> crate::Result<Option<TxMainChainIndex>>;
-
-        fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()>;
 
         fn get_mainchain_tx_by_position(
             &self,
@@ -97,6 +89,20 @@ mockall::mock! {
             &self,
             height: &BlockHeight,
         ) -> crate::Result<Option<Id<Block>>>;
+    }
+
+    impl crate::BlockchainStorageWrite<'_> for StoreTx {
+        fn set_storage_version(&mut self, version: u32) -> crate::Result<()>;
+        fn set_best_block_id(&mut self, id: &Id<Block>) -> crate::Result<()>;
+        fn add_block(&mut self, block: &Block) -> crate::Result<()>;
+        fn del_block(&mut self, id: Id<Block>) -> crate::Result<()>;
+        fn set_mainchain_tx_index(
+            &mut self,
+            tx_id: &Id<Transaction>,
+            tx_index: &TxMainChainIndex,
+        ) -> crate::Result<()>;
+
+        fn del_mainchain_tx_index(&mut self, tx_id: &Id<Transaction>) -> crate::Result<()>;
 
         fn set_block_id_at_height(
             &mut self,
@@ -122,7 +128,7 @@ mockall::mock! {
 #[cfg(test)]
 mod tests {
     pub use super::*;
-    pub use crate::BlockchainStorage;
+    pub use crate::{BlockchainStorageRead, BlockchainStorageWrite};
     use common::primitives::consensus_data::ConsensusData;
     pub use common::primitives::{Idable, H256};
     pub use storage::traits::Transactional;
@@ -197,7 +203,7 @@ mod tests {
     fn attach_block_to_top<'a, BS>(store: &'a mut BS, block: &Block) -> &'static str
     where
         BS: Transactional<'a>,
-        BS::TransactionRw: storage::traits::TransactionRw<Error = crate::Error> + BlockchainStorage,
+        BS::TransactionRw: storage::traits::TransactionRw<Error = crate::Error> + BlockchainStorageWrite<'a>,
     {
         let res: crate::Result<&'static str> = store.transaction_rw(|tx| {
             // Get current best block ID

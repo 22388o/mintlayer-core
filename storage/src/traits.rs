@@ -16,7 +16,7 @@ pub trait GetMapRef<'tx, Sch: schema::Schema> {
 }
 
 /// Get a mutable reference to given single-valued column
-pub trait GetMapMut<'tx, Sch: schema::Schema> {
+pub trait GetMapMut<'tx, Sch: schema::Schema>: GetMapRef<'tx, Sch> {
     /// Type representing the map reference
     type MapMut: MapMut;
 

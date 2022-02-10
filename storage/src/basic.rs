@@ -183,10 +183,10 @@ impl<'st, Sch: Schema> TransactionRw<'st, Sch> {
     }
 }
 
-impl<'st, Sch: Schema> crate::traits::GetMapRef<'st, Sch> for TransactionRw<'st, Sch> {
-    type MapRef = SingleMapRef<'st>;
+impl<'tx, 'st: 'tx, Sch: Schema> crate::traits::GetMapRef<'tx, Sch> for TransactionRw<'st, Sch> {
+    type MapRef = SingleMapRef<'tx>;
 
-    fn get<Col: schema::Column, I>(&self) -> SingleMapRef<'_> {
+    fn get<Col: schema::Column, I>(&'tx self) -> SingleMapRef<'tx> {
         match (self.store.get(Col::NAME), self.delta.get(Col::NAME)) {
             (Some(StoreMap::Single(store)), Some(DeltaMap::Single(delta))) => {
                 SingleMapRef::new(store, delta)
