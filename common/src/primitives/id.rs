@@ -31,6 +31,7 @@ impl From<GenericArray<u8, typenum::U32>> for H256 {
 }
 
 impl H256 {
+    //TODO: https://github.com/mintlayer/mintlayer-core/pull/62#discussion_r801260163
     fn reverse_inner(&self) -> [u8; 32] {
         let mut h256_inner = self.0;
         h256_inner.reverse();
@@ -38,6 +39,7 @@ impl H256 {
     }
 }
 
+//TODO: https://github.com/mintlayer/mintlayer-core/pull/62#discussion_r801260163
 impl From<H256> for Uint256 {
     fn from(hash: H256) -> Self {
         let x = hash.reverse_inner();
