@@ -1021,24 +1021,30 @@ mod tests {
 
         mempool.add_transaction(tx.clone())?;
 
-        let replaceable_input = TxInput::new(tx.get_id(), 0, DUMMY_WITNESS_MSG.to_vec());
-        let other_input = TxInput::new(tx.get_id(), 1, DUMMY_WITNESS_MSG.to_vec());
-
         let flags_replaceable = 1;
         let flags_irreplaceable = 0;
         let locktime = 0;
 
-        let ancestor_with_signal =
-            tx_spend_input(&mempool, replaceable_input, flags_replaceable, locktime)?;
+        let ancestor_with_signal = tx_spend_input(
+            &mempool,
+            TxInput::new(tx.get_id(), 0, DUMMY_WITNESS_MSG.to_vec()),
+            flags_replaceable,
+            locktime,
+        )?;
 
-        let ancestor_without_signal =
-            tx_spend_input(&mempool, other_input, flags_irreplaceable, locktime)?;
+        let ancestor_without_signal = tx_spend_input(
+            &mempool,
+            TxInput::new(tx.get_id(), 1, DUMMY_WITNESS_MSG.to_vec()),
+            flags_irreplaceable,
+            locktime,
+        )?;
 
         mempool.add_transaction(ancestor_with_signal.clone())?;
         mempool.add_transaction(ancestor_without_signal.clone())?;
 
         let input_with_replaceable_parent =
             TxInput::new(ancestor_with_signal.get_id(), 0, DUMMY_WITNESS_MSG.to_vec());
+
         let input_with_irreplaceable_parent = TxInput::new(
             ancestor_without_signal.get_id(),
             0,
