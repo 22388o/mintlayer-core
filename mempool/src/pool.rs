@@ -22,6 +22,33 @@ const MAX_BLOCK_SIZE_BYTES: usize = 1_000_000;
 
 const MEMPOOL_MAX_TXS: usize = 1_000_000;
 
+impl<C: ChainState> TryGetFee for MempoolImpl<C> {
+    fn try_get_fee(&self, tx: &Transaction) -> Result<Amount, TxValidationError> {
+        let inputs = tx
+            .get_inputs()
+            .iter()
+            .map(|input| {
+                let outpoint = input.get_outpoint();
+                self.chain_state
+                    .get_outpoint_value(outpoint)
+                    .or_else(|_| self.store.get_unconfirmed_outpoint_value(outpoint))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let sum_inputs = inputs
+            .iter()
+            .cloned()
+            .sum::<Option<_>>()
+            .ok_or(TxValidationError::TransactionFeeOverflow)?;
+        let sum_outputs = tx
+            .get_outputs()
+            .iter()
+            .map(|output| output.get_value())
+            .sum::<Option<_>>()
+            .ok_or(TxValidationError::TransactionFeeOverflow)?;
+        (sum_inputs - sum_outputs).ok_or(TxValidationError::TransactionFeeOverflow)
+    }
+}
+
 pub trait Mempool<C> {
     fn create(chain_state: C) -> Self;
     fn add_transaction(&mut self, tx: Transaction) -> Result<(), MempoolError>;
@@ -44,30 +71,22 @@ struct TxMempoolEntry {
 }
 
 trait TryGetFee {
-    fn try_get_fee(&self) -> Option<Amount>;
-}
-
-//TODO this should really be sum of inputs minus sum of outputs
-//But we don't yet have a way of summing of the inputs
-impl TryGetFee for Transaction {
-    fn try_get_fee(&self) -> Option<Amount> {
-        self.get_outputs().iter().map(|output| output.get_value()).sum::<Option<_>>()
-    }
+    fn try_get_fee(&self, tx: &Transaction) -> Result<Amount, TxValidationError>;
 }
 
 impl TxMempoolEntry {
-    fn new(tx: Transaction, pool: &MempoolStore) -> Option<TxMempoolEntry> {
+    fn new<C: ChainState>(tx: Transaction, pool: &MempoolImpl<C>) -> Option<TxMempoolEntry> {
         let parents = tx
             .get_inputs()
             .iter()
-            .filter_map(|input| pool.txs_by_id.get(&input.get_outpoint().get_tx_id().get()))
+            .filter_map(|input| pool.store.txs_by_id.get(&input.get_outpoint().get_tx_id().get()))
             .cloned()
             .collect::<BTreeSet<_>>();
-        let fee = tx.try_get_fee()?;
+
+        let fee = pool.try_get_fee(&tx).ok()?;
 
         Some(Self { tx, fee, parents })
     }
-
     fn is_replaceable(&self) -> bool {
         self.tx.is_replaceable()
             || self.unconfirmed_ancestors().iter().any(|ancestor| ancestor.tx.is_replaceable())
@@ -112,14 +131,14 @@ pub struct MempoolImpl<C: ChainState> {
 #[derive(Debug)]
 struct MempoolStore {
     txs_by_id: HashMap<H256, Rc<TxMempoolEntry>>,
-    txs_by_fee: BTreeSet<Rc<TxMempoolEntry>>,
+    txs_by_fee: BTreeMap<Amount, BTreeSet<Rc<TxMempoolEntry>>>,
     spender_txs: BTreeMap<OutPoint, Rc<TxMempoolEntry>>,
 }
 
 impl MempoolStore {
     fn new() -> Self {
         Self {
-            txs_by_fee: BTreeSet::new(),
+            txs_by_fee: BTreeMap::new(),
             txs_by_id: HashMap::new(),
             spender_txs: BTreeMap::new(),
         }
@@ -131,13 +150,29 @@ impl MempoolStore {
             Some(entry) if entry.tx.get_outputs().len() > outpoint.get_output_index() as usize)
     }
 
-    fn add_tx(&mut self, tx: Transaction) -> Result<(), MempoolError> {
-        let id = tx.get_id().get();
-        let entry = TxMempoolEntry::new(tx, self)
-            .ok_or_else(|| MempoolError::from(TxValidationError::TransactionFeeOverflow))?;
+    fn get_unconfirmed_outpoint_value(
+        &self,
+        outpoint: &OutPoint,
+    ) -> Result<Amount, TxValidationError> {
+        let tx_id = outpoint.get_tx_id();
+        let err = || TxValidationError::OutPointNotFound {
+            outpoint: outpoint.to_owned(),
+            tx_id: tx_id.to_owned(),
+        };
+        self.txs_by_id
+            .get(&tx_id.get())
+            .ok_or_else(err)
+            .and_then(|entry| {
+                entry.tx.get_outputs().get(outpoint.get_output_index() as usize).ok_or_else(err)
+            })
+            .map(|output| output.get_value())
+    }
+
+    fn add_tx(&mut self, entry: TxMempoolEntry) -> Result<(), MempoolError> {
+        let id = entry.tx.get_id().get();
         let entry = Rc::new(entry);
         self.txs_by_id.insert(id, Rc::clone(&entry));
-        self.txs_by_fee.insert(Rc::clone(&entry));
+        self.txs_by_fee.entry(entry.fee).or_default().insert(Rc::clone(&entry));
 
         for outpoint in entry.tx.get_inputs().iter().map(|input| input.get_outpoint()) {
             self.spender_txs.insert(outpoint.to_owned(), Rc::clone(&entry));
@@ -146,11 +181,13 @@ impl MempoolStore {
     }
 
     fn drop_tx(&mut self, tx_id: &Id<Transaction>) {
-        if let Some(tx) = self.txs_by_id.remove(&tx_id.get()) {
-            self.txs_by_fee.remove(&tx).then(|| ()).expect("Inconsistent mempool store");
+        if let Some(entry) = self.txs_by_id.remove(&tx_id.get()) {
+            self.txs_by_fee.entry(entry.fee).and_modify(|entries| {
+                entries.remove(&entry).then(|| ()).expect("Inconsistent mempool store")
+            });
             self.spender_txs.retain(|_, entry| entry.tx.get_id() != *tx_id)
         } else {
-            assert!(!self.txs_by_fee.iter().any(|entry| entry.tx.get_id() == *tx_id));
+            assert!(!self.txs_by_fee.values().flatten().any(|entry| entry.tx.get_id() == *tx_id));
             assert!(!self.spender_txs.iter().any(|(_, entry)| entry.tx.get_id() == *tx_id));
         }
     }
@@ -250,12 +287,17 @@ impl<C: ChainState + Debug> MempoolImpl<C> {
             return Err(TxValidationError::TransactionAlreadyInMempool);
         }
 
-        tx.get_inputs()
+        let conflicts = tx
+            .get_inputs()
             .iter()
             .filter_map(|input| self.store.find_conflicting_tx(input.get_outpoint()))
-            .all(|tx| tx.is_replaceable())
-            .then(|| ())
-            .ok_or(TxValidationError::ConflictWithIrreplaceableTransaction)?;
+            .collect::<Vec<_>>();
+
+        for entry in conflicts {
+            if !entry.is_replaceable() {
+                return Err(TxValidationError::ConflictWithIrreplaceableTransaction);
+            }
+        }
 
         self.verify_inputs_available(tx)?;
 
@@ -284,12 +326,14 @@ impl<C: ChainState + Debug> Mempool<C> for MempoolImpl<C> {
             return Err(MempoolError::MempoolFull);
         }
         self.validate_transaction(&tx)?;
-        self.store.add_tx(tx)?;
+        let entry = TxMempoolEntry::new(tx, self)
+            .ok_or_else(|| MempoolError::from(TxValidationError::TransactionFeeOverflow))?;
+        self.store.add_tx(entry)?;
         Ok(())
     }
 
     fn get_all(&self) -> Vec<&Transaction> {
-        self.store.txs_by_fee.iter().map(|mempool_tx| &mempool_tx.tx).collect()
+        self.store.txs_by_fee.values().flatten().map(|entry| &entry.tx).collect()
     }
 
     fn contains_transaction(&self, tx_id: &Id<Transaction>) -> bool {
