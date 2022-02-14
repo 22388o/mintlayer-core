@@ -501,6 +501,7 @@ mod tests {
         coin_pool: BTreeSet<ValuedOutPoint>,
         num_inputs: usize,
         num_outputs: usize,
+        tx_fee: Option<Amount>,
     }
 
     impl TxGenerator {
@@ -516,6 +517,11 @@ mod tests {
                 num_inputs,
                 num_outputs,
             )
+        }
+
+        fn with_fee(mut self, fee: Amount) -> Self {
+            self.tx_fee = Some(fee);
+            self
         }
 
         fn new_with_unconfirmed(
@@ -549,12 +555,13 @@ mod tests {
                 coin_pool,
                 num_inputs,
                 num_outputs,
+                tx_fee: None,
             }
         }
 
         fn generate_tx(&mut self) -> anyhow::Result<Transaction> {
             let valued_inputs = self.generate_tx_inputs();
-            let outputs = self.generate_tx_outputs(&valued_inputs)?;
+            let outputs = self.generate_tx_outputs(&valued_inputs, self.tx_fee)?;
             let locktime = 0;
             let flags = 0;
             let (inputs, _): (Vec<TxInput>, Vec<Amount>) = valued_inputs.into_iter().unzip();
@@ -570,12 +577,13 @@ mod tests {
                     .zip(outputs.iter().enumerate())
                     .map(|(id, (i, output))| valued_outpoint(&id, i as u32, output)),
             );
+
             Ok(tx)
         }
 
         fn generate_replaceable_tx(mut self) -> anyhow::Result<Transaction> {
             let valued_inputs = self.generate_tx_inputs();
-            let outputs = self.generate_tx_outputs(&valued_inputs)?;
+            let outputs = self.generate_tx_outputs(&valued_inputs, self.tx_fee)?;
             let locktime = 0;
             let flags = 1;
             let (inputs, _values): (Vec<TxInput>, Vec<Amount>) = valued_inputs.into_iter().unzip();
@@ -594,21 +602,32 @@ mod tests {
         fn generate_tx_outputs(
             &self,
             inputs: &[(TxInput, Amount)],
+            tx_fee: Option<Amount>,
         ) -> anyhow::Result<Vec<TxOutput>> {
+            if self.num_outputs == 0 {
+                return Ok(vec![]);
+            }
+
             use common::primitives::amount::random;
             let inputs: Vec<_> = inputs.to_owned();
             let (inputs, values): (Vec<TxInput>, Vec<Amount>) = inputs.into_iter().unzip();
             if inputs.is_empty() {
                 return Ok(vec![]);
             }
-            let max_spend =
+            let sum_of_inputs =
                 values.into_iter().sum::<Option<_>>().expect("Overflow in sum of input values");
 
-            let mut left_to_spend = max_spend;
+            let total_to_spend = if let Some(fee) = tx_fee {
+                (sum_of_inputs - fee).expect("underflow")
+            } else {
+                sum_of_inputs
+            };
+
+            let mut left_to_spend = total_to_spend;
             let mut outputs = Vec::new();
 
             let max_output_value = Amount::from(1_000);
-            for _ in 0..self.num_outputs {
+            for _ in 0..self.num_outputs - 1 {
                 let max_output_value = std::cmp::min(
                     (left_to_spend / (2.into())).expect("division failed"),
                     max_output_value,
@@ -620,6 +639,8 @@ mod tests {
                 outputs.push(TxOutput::new(value, Destination::PublicKey));
                 left_to_spend = (left_to_spend - value).expect("subtraction failed");
             }
+
+            outputs.push(TxOutput::new(left_to_spend, Destination::PublicKey));
             Ok(outputs)
         }
 
@@ -927,12 +948,17 @@ mod tests {
         let mut mempool = setup();
         let num_inputs = 1;
         let num_outputs = 1;
+        let original_fee = Amount::from(10);
         let tx = TxGenerator::new(&mempool, num_inputs, num_outputs)
+            .with_fee(original_fee)
             .generate_replaceable_tx()
             .expect("generate_replaceable_tx");
         mempool.add_transaction(tx)?;
 
+        let fee_delta = Amount::from(5);
+        let replacement_fee = (original_fee + fee_delta).expect("overflow");
         let tx = TxGenerator::new(&mempool, num_inputs, num_outputs)
+            .with_fee(replacement_fee)
             .generate_tx()
             .expect("generate_tx_failed");
 
